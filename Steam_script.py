@@ -1,12 +1,11 @@
 #!/usr/bin/python
 import requests
 import json
+import pandas as pd
 from bs4 import BeautifulSoup
 import re
 import random
 import time
-
-
 
 afraid = {'0': {'game_name': '', '0': {'total_count': '', 'last_count': '0',
                                        'steamLoginSecure': '76561198867785639%7C'
@@ -44,9 +43,9 @@ def cookie_total_count_getter():
     return cookie, total_count
 
 
-###################################
-#####   First part
-###################################
+#######################################
+#####   First part : Creates database
+#######################################
 
 
 ## Scans the user's market history
@@ -61,7 +60,6 @@ def market_transactions():
     if from_start == "n":
         last_count = 0
 
-    # scans all pages
     for curr_pos in range(last_count, total_count, page_size):
         time.sleep(random.uniform(0.5, 2.5))
 
@@ -92,8 +90,6 @@ def market_transactions():
                 name_game = name_game[:-13]
                 print(status + " || " + price + " || " + name_game + " || " + name_card)
                 print("_________________________-")
-
-                # After getting each games and cards data, send them to classification for dictionary
                 classifier_game_card(status, price, name_card, name_game)
 
     afraid['0']['0']['last_count'] = str(total_count)
@@ -103,7 +99,6 @@ def market_transactions():
 ## Classifies each card according to its information and adds to dict
 # Works under market_transactions
 def classifier_game_card(status, price, name_card, name_game):
-
     tuu_game = -1
     for i_game in afraid:
         tuu_game += 1
@@ -236,9 +231,9 @@ def card_canceled_on_sale(i_game, i_card):
     afraid[i_game][str(i_card)]['#oON'] = str(a)
 
 
-###################################
-#####   Second part
-###################################
+#######################################
+#####   Second part : Fixing and adding
+#######################################
 
 
 ## Finds all inventory data
@@ -275,7 +270,8 @@ def inv_getter():
                                     instanceid = inv_data[dat]["instanceid"]
 
                                     for inst in inv_inv:
-                                        if inv_inv[inst]["classid"] == classid and inv_inv[inst]["instanceid"] == instanceid:
+                                        if inv_inv[inst]["classid"] == classid and inv_inv[inst][
+                                            "instanceid"] == instanceid:
                                             count_dates += 1
 
                                     dates.append(inv_data[dat]["cache_expiration"][:-10] + " : " + str(count_dates))
@@ -329,7 +325,7 @@ def inv_getter():
                                     afraid[i_game][str(i_card)]['#oIN'] = inv_in_inv + "/" + inv_off_sale
 
 
-# Requests steam/market and finds buy orders quantity and price data
+## Requests steam/market and finds buy orders quantity and price data
 def buy_order_adder():
     cookie = {'steamLoginSecure': '{}'.format(afraid['0']['0']['steamLoginSecure'])}
 
@@ -365,6 +361,11 @@ def buy_order_adder():
                     afraid[i_game][str(i_card)]["buy_order"] = quantity
 
 
+#######################################
+#####   Third part : Finalize
+#######################################
+
+
 ## In dict, prices are like 27, turn them into 0.27
 ## Must be exacute after changes saved to file
 def total_fixer():
@@ -377,16 +378,28 @@ def total_fixer():
                 i_i += 1
 
             for i_card in range(i_i):
-
                 earned = afraid[i_game][str(i_card)]['total_m_earned']
                 spend = afraid[i_game][str(i_card)]['total_m_spend']
 
-                afraid[i_game][str(i_card)]['total_m_earned'] = str(int(earned)/100)
-                afraid[i_game][str(i_card)]['total_m_spend'] = str(int(spend)/100)
+                afraid[i_game][str(i_card)]['total_m_earned'] = str(int(earned) / 100)
+                afraid[i_game][str(i_card)]['total_m_spend'] = str(int(spend) / 100)
 
-                afraid[i_game][str(i_card)]['total'] = str((int(earned) - int(spend))/100)
+                afraid[i_game][str(i_card)]['total'] = str((int(earned) - int(spend)) / 100)
 
 
+## Converts the dictionary to a table
+def data_framer():
+    afraid.pop("0")
+
+    pd.set_option('display.expand_frame_repr', False)
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.max_row', None)
+
+    dp = pd.DataFrame.from_dict(
+        {(afraid[i]["game_name"], j): afraid[i][j] for i in afraid for j in afraid[i] if j != "game_name"},
+        orient='index')
+
+    print(dp)
 
 
 
@@ -397,5 +410,7 @@ inv_getter()  # Enters inventory data
 buy_order_adder()  # Adds buy orders number, not price !
 
 total_fixer()  # Don't call it before save, fix decimal points
+
+data_framer()  # Visualize the data
 
 print(afraid)
