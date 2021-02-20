@@ -6,6 +6,8 @@ import re
 import random
 import time
 
+
+
 afraid = {'0': {'game_name': '', '0': {'total_count': '', 'last_count': '0',
                                        'steamLoginSecure': '76561198867785639%7C'
                                                            '%7C9F90AD8A3D07676ACA7685B9779F3440C3E44BEE'}}}
@@ -41,6 +43,7 @@ def cookie_total_count_getter():
 
     return cookie, total_count
 
+
 ###################################
 #####   First part
 ###################################
@@ -66,7 +69,6 @@ def market_transactions():
             'https://steamcommunity.com/market/myhistory/render/?query=&start={}&count=500'.format(curr_pos),
             cookies=cookie)
 
-
         soup = BeautifulSoup(json.loads(history.text)["results_html"], "html.parser")
         containers = soup.find_all("div", {"class": "market_listing_row"})
 
@@ -91,7 +93,7 @@ def market_transactions():
                 print(status + " || " + price + " || " + name_game + " || " + name_card)
                 print("_________________________-")
 
-                # After getting each games and cards data, send them to classification for dictionery
+                # After getting each games and cards data, send them to classification for dictionary
                 classifier_game_card(status, price, name_card, name_game)
 
     afraid['0']['0']['last_count'] = str(total_count)
@@ -164,7 +166,7 @@ def card_status_all(status, i_game, i_card, price):
 def game_adder(i_game, name_game, name_card):
     afraid[i_game] = {'game_name': '',
                       '0': {'card_name': '', '#oBought': '0', '#oSelled': '0', 'total_m_spend': '0',
-                            'total_m_earned': '0', 'total': '0', '#oIN': '0', '#oON': '0'}}
+                            'total_m_earned': '0', 'total': '0', '#oIN': '0', '#oON': '0', 'buy_order': '0'}}
     afraid[i_game]['game_name'] = name_game
     afraid[i_game]['0']["card_name"] = name_card
 
@@ -174,7 +176,7 @@ def game_adder(i_game, name_game, name_card):
 def game_card_adder(i_game, i_card, name_card):
     afraid[i_game][str(i_card)] = {'card_name': '', '#oBought': '0', '#oSelled': '0',
                                    'total_m_spend': '0', 'total_m_earned': '0', 'total': '0',
-                                   '#oIN': '0', '#oON': '0'}
+                                   '#oIN': '0', '#oON': '0', 'buy_order': '0'}
     afraid[i_game][str(i_card)]["card_name"] = name_card
 
 
@@ -223,6 +225,7 @@ def card_put_on_sale(i_game, i_card):
     a = afraid[i_game][str(i_card)]['#oON']
     a = int(a) + 1
     afraid[i_game][str(i_card)]['#oON'] = str(a)
+
 
 ## Calculates the number of cards on sale
 # Works under classifier_game_card
@@ -323,7 +326,44 @@ def inv_getter():
                             for i_card in range(i_i):
 
                                 if inv_card_name == afraid[i_game][str(i_card)]["card_name"]:
-                                    afraid[i_game][str(i_card)]["'#oIN'"] = inv_in_inv + "/" + inv_off_sale
+                                    afraid[i_game][str(i_card)]['#oIN'] = inv_in_inv + "/" + inv_off_sale
+
+
+# Requests steam/market and finds buy orders quantity and price data
+def buy_order_adder():
+    cookie = {'steamLoginSecure': '{}'.format(afraid['0']['0']['steamLoginSecure'])}
+
+    buy_orders = requests.get('https://steamcommunity.com/market/{}'.format(id), cookies=cookie)
+    soup = BeautifulSoup(buy_orders.text, "html.parser")
+    containers = soup.find_all("div", {"class": "market_listing_row market_recent_listing_row"})
+
+    for container in containers:
+        quantity_price = container.find_all("div", {"class": "market_listing_right_cell market_listing_my_price"})
+        quantity_price = quantity_price[0].span.span.text
+        quantity_price = quantity_price.strip()
+        quantity_price = quantity_price.replace("@\r\n\t\t\t\t", "")
+
+        game_name = container.find_all("span", {"class": "market_listing_game_name"})[0].text
+
+        card_name = container.find_all("a", {"class": "market_listing_item_name_link"})[0].text
+
+        quantity_price = re.findall("\d+", quantity_price)
+
+        quantity = quantity_price[0]
+        price = int(quantity_price[1] * 100) + int(quantity_price[2])
+
+    for i_game in afraid:
+        if afraid[i_game]['game_name'] == game_name:
+
+            i_i = -1
+
+            for i in afraid[i_game]:
+                i_i += 1
+
+            for i_card in range(i_i):
+                if afraid[i_game][str(i_card)]["card_name"] == card_name:
+                    afraid[i_game][str(i_card)]["buy_order"] = quantity
+
 
 ## In dict, prices are like 27, turn them into 0.27
 ## Must be exacute after changes saved to file
@@ -347,10 +387,15 @@ def total_fixer():
                 afraid[i_game][str(i_card)]['total'] = str((int(earned) - int(spend))/100)
 
 
+
+
+
 market_transactions()  # Creates and fill all the game and their cards, the dictionary ready for after operation
 
-inv_getter()
+inv_getter()  # Enters inventory data
 
-total_fixer()
+buy_order_adder()  # Adds buy orders number, not price !
+
+total_fixer()  # Don't call it before save, fix decimal points
 
 print(afraid)
